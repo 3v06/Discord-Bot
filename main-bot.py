@@ -28,4 +28,12 @@ async def ping(ctx):
 async def hi(ctx):
     await ctx.send(f"Hello {ctx.author.mention} :wave:, how was your day today?")
 
+@bot.command()
+async def afk(ctx):
+    await ctx.send(f"{ctx.author.mention} is now AFK :zzz:")
+
+@bot.command()
+async def unafk(ctx):
+    await ctx.send(f"{ctx.author.mention} is no longer AFK :smiley:")
+
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

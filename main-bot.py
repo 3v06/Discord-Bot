@@ -35,7 +35,7 @@ async def afk(ctx, duration=None, *, reason=None):
     elif reason is None:
         await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: for {duration}")
     elif duration is None:
-        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: because of {reason}")
+        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: for {reason}")
     else:
         await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: for {duration} because of {reason}")
     

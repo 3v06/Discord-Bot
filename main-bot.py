@@ -25,7 +25,7 @@ async def ping(ctx):
     await ctx.send(f"Pong = {round(bot.latency * 1000)}ms")
 
 @bot.command()
-async def hello(ctx):
+async def hi(ctx):
     await ctx.send(f"Hello {ctx.author.name} :wave:")
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

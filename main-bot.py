@@ -26,6 +26,6 @@ async def ping(ctx):
 
 @bot.command()
 async def hi(ctx):
-    await ctx.send(f"Hello {ctx.author.mention} :wave:")
+    await ctx.send(f"Hello {ctx.author.mention} :wave:, how was your day today?")
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

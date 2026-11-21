@@ -29,11 +29,20 @@ async def hi(ctx):
     await ctx.send(f"Hello {ctx.author.mention} :wave:, how was your day today?")
 
 @bot.command()
-async def afk(ctx):
-    await ctx.send(f"{ctx.author.mention} is now AFK :zzz:")
-
+async def afk(ctx, duration=None, *, reason=None):
+    if duration is None and reason is None:
+        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping:")
+    elif reason is None:
+        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: for {duration}")
+    elif duration is None:
+        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: because of {reason}")
+    else:
+        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: for {duration} because of {reason}")
+    
 @bot.command()
 async def unafk(ctx):
     await ctx.send(f"{ctx.author.mention} is no longer AFK :smiley:")
+
+
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

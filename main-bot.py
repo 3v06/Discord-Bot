@@ -43,8 +43,12 @@ async def afk(ctx, duration=None, *, reason=None):
 async def unafk(ctx):
     await ctx.send(f"{ctx.author.mention} is no longer AFK :smiley:")
 
-@bot.event()
-async def on_member_join(member)
-    await member.send(f"welcome to my private server {ctx.author.mention}")
+@bot.event
+async def on_member_join(member):
+    try:
+        await member.send(f"Welcome to my private server {member.mention} :wave: Glad to have you here!")
+    except:
+        pass
+
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

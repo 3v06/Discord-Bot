@@ -47,5 +47,4 @@ async def unafk(ctx):
 async def on_member_join(member)
     await member.send(f"welcome to my private server {ctx.author.mention}")
 
-
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)

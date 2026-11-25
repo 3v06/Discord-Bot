@@ -1,0 +1,20 @@
+{
+  "$comment": "Keyword → response rules. The first matching rule replies once per message. 'match' can be 'word' (default, whole-word), 'contains' or 'exact'. Edit this file and run /autoreplies reload, or wait a few seconds for automatic reload.",
+  "replies": [
+    {
+      "keywords": ["hello", "hi", "hey"],
+      "response": "Hello! Welcome to the server! 👋",
+      "match": "word"
+    },
+    {
+      "keywords": ["how are you", "how's it going"],
+      "response": "I'm just a bot, but I'm running great! 🤖",
+      "match": "contains"
+    },
+    {
+      "keywords": ["rules"],
+      "response": "Please check out the #rules channel for the server guidelines.",
+      "match": "word"
+    }
+  ]
+}

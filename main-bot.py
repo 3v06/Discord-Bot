@@ -1,54 +1,47 @@
-# Discord Bot
+#!/usr/bin/env python3
+"""Entry point for the Discord community bot.
 
-import discord
-from discord.ext import commands
+Run with::
+
+    ./venv/bin/python main-bot.py
+
+All configuration is loaded from ``.env`` (see ``.env.example``).
+"""
+
+from __future__ import annotations
+
 import logging
-from dotenv import load_dotenv
-import os
+import sys
 
-load_dotenv()
-token = os.getenv('DISCORD_TOKEN')
+from bot.client import DiscordBot
+from bot.config import Config
+from bot.logging_setup import setup_logging
 
-handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
 
-bot = commands.Bot(command_prefix='-', intents=intents)
-
-@bot.event
-async def on_ready():
-    print(f"We are ready to go in {bot.user.name}")
-
-@bot.command()
-async def ping(ctx):
-    await ctx.send(f"Pong = {round(bot.latency * 1000)}ms")
-
-@bot.command()
-async def hi(ctx):
-    await ctx.send(f"Hello {ctx.author.mention} :wave:, how was your day today?")
-
-@bot.command()
-async def afk(ctx, duration=None, *, reason=None):
-    if duration is None and reason is None:
-        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping:")
-    elif reason is None:
-        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: for {duration}")
-    elif duration is None:
-        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: for {reason}")
-    else:
-        await ctx.send(f"{ctx.author.mention} is now AFK :sleeping: for {duration} because of {reason}")
-    
-@bot.command()
-async def unafk(ctx):
-    await ctx.send(f"{ctx.author.mention} is no longer AFK :smiley:")
-
-@bot.event
-async def on_member_join(member):
+def main() -> int:
     try:
-        await member.send(f"Welcome to my private server {member.mention} :wave: Glad to have you here!")
-    except:
-        pass
+        config = Config.from_env()
+    except RuntimeError as exc:
+        print(f"Configuration error: {exc}", file=sys.stderr)
+        return 1
+
+    config.ensure_dirs()
+    logger, file_handler = setup_logging(config.log_file, config.log_level)
+
+    bot = DiscordBot(config)
+    try:
+        bot.run(
+            config.token,
+            log_handler=file_handler,
+            log_level=getattr(logging, config.log_level, logging.INFO),
+        )
+    except KeyboardInterrupt:
+        logger.info("Shutdown requested with Ctrl+C")
+    except Exception:
+        logger.exception("The bot crashed during startup or runtime")
+        return 1
+    return 0
 
 
-bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+if __name__ == "__main__":
+    raise SystemExit(main())

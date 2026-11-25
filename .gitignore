@@ -1,4 +1,9 @@
 venv/
 .env
-discord.log
+discord.log*
 __pycache__/
+*.py[cod]
+data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm

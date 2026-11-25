@@ -1,0 +1,24 @@
+# ===========================================================================
+# Blacklisted words and phrases
+# ===========================================================================
+# One word or phrase per line. Blank lines and lines starting with "#" are
+# ignored. Matching is case-insensitive and tolerates common bypass attempts:
+#   * leetspeak        (e.g. b4dw0rd, 5pam)
+#   * repeated letters (e.g. baaadword)
+#   * inserted spaces/punctuation (e.g. b a d w o r d)
+#   * full-width characters and zero-width characters
+#   * common Cyrillic/Greek lookalike letters
+#
+# Matching respects word boundaries, so a listed word only matches as a whole
+# word/phrase and not as part of a longer legitimate word.
+#
+# Edit this file at any time, then run /blacklist reload (or wait a few seconds
+# for the automatic reload) — no bot restart is required.
+# ===========================================================================
+
+badword1
+badword2
+inappropriateword
+
+# Example multi-word phrase (remove the leading "#" to enable):
+# bad phrase example

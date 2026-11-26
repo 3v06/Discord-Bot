@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -29,6 +30,7 @@ _ACTION_ICONS = {
     "blacklist": "🚫",
     "clear": "🧹",
     "message_delete": "🗑️",
+    "bulk_message_delete": "🗑️",
     "ticket_created": "🎫",
     "ticket_closed": "🔒",
     "ticket_deleted": "🗑️",
@@ -51,6 +53,10 @@ def setup_logging(
 
     for existing in list(logger.handlers):
         logger.removeHandler(existing)
+        try:
+            existing.close()
+        except Exception:  # pragma: no cover - defensive cleanup
+            pass
 
     formatter = logging.Formatter(
         "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
@@ -78,6 +84,10 @@ class ModLog:
     def __init__(self, bot: "DiscordBot") -> None:
         self.bot = bot
         self.logger = logging.getLogger("discordbot.modlog")
+        # (guild_id, channel_id) -> (monotonic expiry, channel or None)
+        self._channel_cache: dict[
+            tuple[int, int], tuple[float, discord.TextChannel | None]
+        ] = {}
 
     async def _resolve_channel(
         self, guild: discord.Guild, preferred_id: int | None = None
@@ -85,13 +95,27 @@ class ModLog:
         async def lookup(channel_id: int) -> discord.TextChannel | None:
             if not channel_id:
                 return None
+
+            key = (guild.id, channel_id)
+            now = time.monotonic()
+            cached = self._channel_cache.get(key)
+            if cached is not None and cached[0] > now:
+                return cached[1]
+
             channel = guild.get_channel(channel_id)
             if channel is None:
                 try:
                     channel = await guild.fetch_channel(channel_id)
                 except discord.HTTPException:
-                    return None
-            return channel if isinstance(channel, discord.TextChannel) else None
+                    channel = None
+
+            resolved = channel if isinstance(channel, discord.TextChannel) else None
+            if len(self._channel_cache) > 1000:
+                self._channel_cache.clear()
+            # Cache misses briefly so a deleted/misconfigured log channel does
+            # not cause an API request for every moderation event.
+            self._channel_cache[key] = (now + 30.0, resolved)
+            return resolved
 
         if preferred_id:
             channel = await lookup(preferred_id)

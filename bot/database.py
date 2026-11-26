@@ -110,6 +110,7 @@ class Database:
 
     def __init__(self, path: Path) -> None:
         self.path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._closed = False
         self._connection = sqlite3.connect(str(path), check_same_thread=False)
@@ -118,6 +119,7 @@ class Database:
         with self._lock:
             self._connection.execute("PRAGMA journal_mode=WAL")
             self._connection.execute("PRAGMA synchronous=NORMAL")
+            self._connection.execute("PRAGMA busy_timeout=5000")
             self._connection.execute("PRAGMA foreign_keys=ON")
             self._connection.executescript(SCHEMA)
             self._connection.commit()
@@ -149,13 +151,27 @@ class Database:
 
     def _fetchone_sync(self, sql: str, params: Sequence[Any]) -> dict[str, Any] | None:
         with self._lock:
-            row = self._connection.execute(sql, tuple(params)).fetchone()
-        return dict(row) if row is not None else None
+            try:
+                row = self._connection.execute(sql, tuple(params)).fetchone()
+                # Statements such as INSERT ... RETURNING write through this
+                # path, so commit here as well.  Committing a pure SELECT is a
+                # harmless no-op and keeps the connection out of an implicit
+                # transaction.
+                self._connection.commit()
+                return dict(row) if row is not None else None
+            except Exception:
+                self._connection.rollback()
+                raise
 
     def _fetchall_sync(self, sql: str, params: Sequence[Any]) -> list[dict[str, Any]]:
         with self._lock:
-            rows = self._connection.execute(sql, tuple(params)).fetchall()
-        return [dict(row) for row in rows]
+            try:
+                rows = self._connection.execute(sql, tuple(params)).fetchall()
+                self._connection.commit()
+                return [dict(row) for row in rows]
+            except Exception:
+                self._connection.rollback()
+                raise
 
     async def execute(self, sql: str, params: Iterable[Any] = ()) -> int | None:
         return await asyncio.to_thread(self._execute_sync, sql, tuple(params))
@@ -251,16 +267,36 @@ class Database:
         channel_id: int,
         user_id: int,
         subject: str,
-    ) -> int:
-        row_id = await self.execute(
+    ) -> int | None:
+        """Create a ticket unless the user already has an open one.
+
+        The check and insert happen in a single statement so two rapid button
+        presses cannot create two open tickets.  Returns the new row id, or
+        ``None`` when another ticket was opened concurrently.
+        """
+        row = await self.fetchone(
             """
             INSERT INTO tickets
                 (number, guild_id, channel_id, user_id, subject, status, created_at)
-            VALUES (?, ?, ?, ?, ?, 'open', ?)
+            SELECT ?, ?, ?, ?, ?, 'open', ?
+            WHERE NOT EXISTS (
+                SELECT 1 FROM tickets
+                WHERE guild_id = ? AND user_id = ? AND status = 'open'
+            )
+            RETURNING id
             """,
-            (number, guild_id, channel_id, user_id, subject[:1000], int(time.time())),
+            (
+                number,
+                guild_id,
+                channel_id,
+                user_id,
+                subject[:1000],
+                int(time.time()),
+                guild_id,
+                user_id,
+            ),
         )
-        return int(row_id or 0)
+        return int(row["id"]) if row else None
 
     async def get_ticket_by_channel(self, channel_id: int) -> dict[str, Any] | None:
         return await self.fetchone(

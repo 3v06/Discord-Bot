@@ -57,9 +57,17 @@ _CONFUSABLES = str.maketrans(
 
 
 def normalize_text(text: str) -> str:
-    """Case-fold text and remove characters commonly used to hide words."""
-    text = unicodedata.normalize("NFKC", text)
+    """Normalise text to defeat common blacklist bypasses.
+
+    NFKD decomposition removes accents (``bád`` → ``bad``), zero-width
+    characters are stripped, case is folded, and common Cyrillic/Greek
+    lookalikes are mapped to Latin letters.  Case-folding happens *before* the
+    lookalike mapping so uppercase Cyrillic (``А``) is translated too.
+    """
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(char for char in text if not unicodedata.combining(char))
     text = text.translate(_ZERO_WIDTH)
+    text = text.casefold()
     text = text.translate(_CONFUSABLES)
     return text.casefold()
 

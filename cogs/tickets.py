@@ -43,6 +43,11 @@ class TicketModal(discord.ui.Modal, title="Open a support ticket"):
             interaction, str(self.subject.value), str(self.details.value)
         )
 
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception
+    ) -> None:
+        await self.cog.handle_view_error(interaction, error)
+
 
 class TicketPanelView(discord.ui.View):
     """Persistent view with the public "open ticket" button."""
@@ -60,7 +65,17 @@ class TicketPanelView(discord.ui.View):
     async def open_ticket(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "Tickets can only be opened inside a server.", ephemeral=True
+            )
+            return
         await interaction.response.send_modal(TicketModal(self.cog))
+
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item
+    ) -> None:
+        await self.cog.handle_view_error(interaction, error)
 
 
 class TicketControlView(discord.ui.View):
@@ -91,6 +106,11 @@ class TicketControlView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
         await self.cog.request_delete(interaction)
+
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item
+    ) -> None:
+        await self.cog.handle_view_error(interaction, error)
 
 
 class ConfirmDeleteView(discord.ui.View):
@@ -123,6 +143,11 @@ class ConfirmDeleteView(discord.ui.View):
             content="Ticket deletion cancelled.", embed=None, view=None
         )
         self.stop()
+
+    async def on_error(
+        self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item
+    ) -> None:
+        await self.cog.handle_view_error(interaction, error)
 
 
 class Tickets(commands.Cog):

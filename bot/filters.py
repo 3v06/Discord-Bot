@@ -74,7 +74,7 @@ class Blacklist:
 
     def _load_sync(self) -> tuple[list[str], list[tuple[str, re.Pattern[str]]]]:
         try:
-            raw = self.path.read_text(encoding="utf-8")
+            raw = self.path.read_text(encoding="utf-8-sig")
         except OSError:
             return [], []
 
@@ -188,7 +188,7 @@ class AutoReplies:
 
     def _load_sync(self) -> tuple[list[AutoReplyRule], str | None]:
         try:
-            raw = self.path.read_text(encoding="utf-8")
+            raw = self.path.read_text(encoding="utf-8-sig")
         except FileNotFoundError:
             return [], f"File not found: {self.path.name}"
         except OSError as exc:

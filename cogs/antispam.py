@@ -182,7 +182,7 @@ class AntiSpam(commands.Cog):
         channel = message.channel
         if isinstance(channel, (discord.TextChannel, discord.Thread)):
             me = message.guild.me
-            if channel.permissions_for(me).manage_messages:
+            if me is not None and channel.permissions_for(me).manage_messages:
                 self.bot.suppress_delete_log(message.id)
                 try:
                     await message.delete()
@@ -336,6 +336,8 @@ class AntiSpam(commands.Cog):
         me = message.guild.me
         if seconds <= 0:
             return False, "timeout disabled"
+        if me is None:
+            return False, "bot member unavailable"
         if not me.guild_permissions.moderate_members:
             return False, "missing Moderate Members permission"
 

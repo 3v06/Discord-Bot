@@ -92,6 +92,9 @@ class DiscordBot(commands.Bot):
         # Message IDs whose deletion must not produce a "message deleted" log
         # (bulk clears, automod deletions, temporary warnings...).
         self.suppressed_deletes: set[int] = set()
+        # Channel ID -> monotonic expiry for bulk-delete events triggered by
+        # /clearm, which already writes its own audit entry.
+        self.suppressed_bulk_deletes: dict[int, float] = {}
         # Message IDs already handled by a moderation system; other listeners
         # skip them so one bad message never triggers two punishments.
         self.moderated_messages: set[int] = set()
@@ -133,6 +136,25 @@ class DiscordBot(commands.Bot):
         if message_id in self.suppressed_deletes:
             self.suppressed_deletes.discard(message_id)
             return True
+        return False
+
+    def release_suppressed_deletes(self, *message_ids: int) -> None:
+        """Forget suppressions for messages that were not actually deleted."""
+        for message_id in message_ids:
+            self.suppressed_deletes.discard(int(message_id))
+
+    def suppress_bulk_delete(self, channel_id: int) -> None:
+        if len(self.suppressed_bulk_deletes) > 1000:
+            self.suppressed_bulk_deletes.clear()
+        self.suppressed_bulk_deletes[int(channel_id)] = time.monotonic() + 60.0
+
+    def consume_suppressed_bulk(self, channel_id: int) -> bool:
+        expires = self.suppressed_bulk_deletes.get(int(channel_id))
+        if expires is None:
+            return False
+        if expires > time.monotonic():
+            return True
+        self.suppressed_bulk_deletes.pop(int(channel_id), None)
         return False
 
     def mark_moderated(self, message_id: int) -> None:

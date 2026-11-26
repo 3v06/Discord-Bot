@@ -309,9 +309,13 @@ class Moderation(commands.Cog):
         pinned = [message for message in fetched if message.pinned]
         candidates = [message for message in fetched if not message.pinned]
         self.bot.suppress_delete_log(*(message.id for message in candidates))
+        if isinstance(channel, discord.TextChannel):
+            # /clearm writes its own audit entry; do not also log the bulk event.
+            self.bot.suppress_bulk_delete(channel.id)
 
         cutoff = discord.utils.utcnow() - timedelta(days=14)
         deleted = 0
+        deleted_ids: set[int] = set()
 
         if isinstance(channel, discord.TextChannel):
             recent = [message for message in candidates if message.created_at >= cutoff]
@@ -324,6 +328,7 @@ class Moderation(commands.Cog):
                     else:
                         await channel.delete_messages(batch)
                     deleted += len(batch)
+                    deleted_ids.update(message.id for message in batch)
                 except discord.HTTPException:
                     # Fall back to individual deletion; one bad message must
                     # not abort the whole batch.
@@ -331,6 +336,7 @@ class Moderation(commands.Cog):
                         try:
                             await message.delete()
                             deleted += 1
+                            deleted_ids.add(message.id)
                         except discord.HTTPException:
                             continue
         else:
@@ -341,8 +347,15 @@ class Moderation(commands.Cog):
             try:
                 await message.delete()
                 deleted += 1
+                deleted_ids.add(message.id)
             except discord.HTTPException:
                 continue
+
+        # Messages that could not be deleted would otherwise stay in the
+        # suppression set forever and hide a later manual deletion.
+        self.bot.release_suppressed_deletes(
+            *(message.id for message in candidates if message.id not in deleted_ids)
+        )
 
         failed = len(candidates) - deleted
         embed = discord.Embed(
@@ -625,8 +638,6 @@ class Moderation(commands.Cog):
         if not content:
             return
 
-        if self.bot.is_command_message(content):
-            return
         settings = await self.bot.guild_config(message.guild.id)
         if not settings.bool("blacklist_enabled"):
             return
@@ -644,6 +655,8 @@ class Moderation(commands.Cog):
 
         self.bot.mark_moderated(message.id)
         me = message.guild.me
+        if me is None:
+            return
         deleted = False
         timed_out = False
         timeout_seconds = settings.int("blacklist_timeout_seconds")
@@ -744,7 +757,7 @@ class Moderation(commands.Cog):
             return
 
         message = payload.cached_message
-        if message is None or message.author.bot:
+        if message is not None and message.author.bot:
             return
 
         settings = await self.bot.guild_config(payload.guild_id)
@@ -764,28 +777,85 @@ class Moderation(commands.Cog):
             color=COLOR_MODERATION,
             timestamp=discord.utils.utcnow(),
         )
-        embed.add_field(
-            name="Author",
-            value=f"{message.author.mention}\n`{message.author.id}`",
-            inline=True,
-        )
+        if message is not None:
+            author_value = f"{message.author.mention}\n`{message.author.id}`"
+            content = message.content or "[embed/attachment]"
+            reason = message.content[:500] if message.content else "[embed/attachment]"
+            user_id = message.author.id
+        else:
+            # The message was sent before the bot started or was not cached;
+            # log what is available instead of silently dropping the event.
+            author_value = "Unknown (message not cached)"
+            content = "Not available"
+            reason = "Deleted message was not cached"
+            user_id = None
+
+        embed.add_field(name="Author", value=author_value, inline=True)
         embed.add_field(
             name="Channel",
             value=channel.mention if channel else f"`{payload.channel_id}`",
             inline=True,
         )
-        embed.add_field(
-            name="Content",
-            value=truncate(message.content or "[embed/attachment]", 1000),
-            inline=False,
-        )
+        embed.add_field(name="Content", value=truncate(content, 1000), inline=False)
         embed.set_footer(text=f"Message ID: {payload.message_id}")
 
         await self.bot.modlog.record(
             guild,
             "message_delete",
-            user_id=message.author.id,
-            reason=message.content[:500] if message.content else "[embed/attachment]",
+            user_id=user_id,
+            reason=reason,
+            embed=embed,
+        )
+
+    @commands.Cog.listener()
+    async def on_raw_bulk_message_delete(
+        self, payload: discord.RawBulkMessageDeleteEvent
+    ) -> None:
+        if payload.guild_id is None:
+            return
+        if self.bot.consume_suppressed_bulk(payload.channel_id):
+            return
+
+        settings = await self.bot.guild_config(payload.guild_id)
+        if not settings.bool("log_deletes"):
+            return
+        if settings.int("log_channel_id") == payload.channel_id:
+            return
+
+        guild = self.bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+
+        count = len(payload.message_ids)
+        if not count:
+            return
+
+        channel = guild.get_channel(payload.channel_id)
+        channel_label = channel.mention if channel else f"`{payload.channel_id}`"
+        authors: list[str] = []
+        seen: set[int] = set()
+        for message in payload.cached_messages:
+            if message.author.id in seen:
+                continue
+            seen.add(message.author.id)
+            authors.append(message.author.mention)
+            if len(authors) >= 10:
+                break
+
+        embed = discord.Embed(
+            title="🗑️ Bulk Messages Deleted",
+            description=f"**{count}** message(s) were deleted in {channel_label}.",
+            color=COLOR_MODERATION,
+            timestamp=discord.utils.utcnow(),
+        )
+        if authors:
+            embed.add_field(name="Authors", value=", ".join(authors), inline=False)
+        embed.set_footer(text="Bulk deletion")
+
+        await self.bot.modlog.record(
+            guild,
+            "bulk_message_delete",
+            reason=f"{count} message(s) deleted in #{getattr(channel, 'name', payload.channel_id)}",
             embed=embed,
         )
 
